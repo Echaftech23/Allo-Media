@@ -1,15 +1,10 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/my-app';
+const db = process.env.MONGODB_URI;
 
 exports.connect = () => {
-  mongoose.connect(MONGODB_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useFindAndModify: false,
-    useCreateIndex: true
-  })
+  mongoose.connect(db)
   .then(() => {
     console.log('Connected to the database');
   })
