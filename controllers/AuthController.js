@@ -73,7 +73,43 @@ async function register(req, res) {
     }
 }
 
+async function activate(req, res) {
+    // get token from url
+    const token = req.query.token;
 
+    if (!token) return res.status(401).json({ error: "Access denied" });
+
+    // verify token
+    const decoded_user = validateToken(token);
+    if (!decoded_user.success) {
+        return res.status(401).json({ error: "Access denied, token invalid" });
+    }
+    const _id = decoded_user.data._id;
+    // update user
+    try {
+        const updatedUser = await UserModel.updateOne(
+            { _id },
+            { is_verified: true }
+        );
+        res.json({
+            success: "Account activated successfully, you can now login",
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Something went wrong" });
+    }
+}
+
+function logout(req, res) {
+    req.user = null;
+    req.cookies["authToken"] = null;
+    res.cookie("authToken", "", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
+    res.json({ success: "Logged out successfully" });
+}
 
 module.exports = {
     register,
