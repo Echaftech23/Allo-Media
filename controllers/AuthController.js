@@ -44,7 +44,29 @@ async function register(req, res) {
             expiresIn: 700,
         });
         
-        
+        const queryParam = encodeURIComponent(token);
+
+        let mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: req.body.email,
+            subject: "Account activation link",
+            text: `Hello ${req.body.name},`,
+            html: `
+                <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
+                    <h3>🎉 Welcome to AlloMedia! 🎉</h3>
+                    <p>We're excited to have you on board. Please click the link below to activate your account:</p>
+                    <a href="http://127.0.0.1:3000/activate?token=${queryParam}" 
+                       style="display: inline-block; padding: 10px 20px; margin: 20px 0; font-size: 16px; color: white; background-color: #007BFF; text-decoration: none; border-radius: 5px;">
+                        🔓 Activate your account
+                    </a>
+                    <p>If you did not create an account, please ignore this email.</p>
+                    <p>Thank you,</p>
+                    <p>The AlloMedia Team</p>
+                </div>
+            `,
+        };
+        await sendEmail(mailOptions);
+
         res.status(201).json({
             success: "User registered successfully, verify your email",
         });
