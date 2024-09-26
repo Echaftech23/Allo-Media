@@ -100,7 +100,19 @@ async function activate(req, res) {
     }
 }
 
+function logout(req, res) {
+    req.user = null;
+    req.cookies["authToken"] = null;
+    res.cookie("authToken", "", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
+    res.json({ success: "Logged out successfully" });
+}
+
 module.exports = {
     register,
     activate,
+    logout,
 };
