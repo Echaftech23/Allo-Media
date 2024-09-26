@@ -68,5 +68,35 @@ describe('Auth Controller', () => {
     });
   });
 
-  
+  describe('activate', () => {
+    it('should activate a user account successfully', async () => {
+      mockRequest.query.token = 'validtoken';
+      validateToken.mockReturnValue({ success: true, data: { _id: 'user123' } });
+      UserModel.updateOne.mockResolvedValue({ nModified: 1 });
+
+      await activate(mockRequest, mockResponse);
+
+      expect(mockResponse.json).toHaveBeenCalledWith({
+        success: "Account activated successfully, you can now login"
+      });
+    });
+
+    it('should return 401 if token is missing', async () => {
+      await activate(mockRequest, mockResponse);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(401);
+      expect(mockResponse.json).toHaveBeenCalledWith({ error: "Access denied" });
+    });
+
+    it('should return 401 if token is invalid', async () => {
+      mockRequest.query.token = 'invalidtoken';
+      validateToken.mockReturnValue({ success: false });
+
+      await activate(mockRequest, mockResponse);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(401);
+      expect(mockResponse.json).toHaveBeenCalledWith({ error: "Access denied, token invalid" });
+    });
+  });
+
 });
