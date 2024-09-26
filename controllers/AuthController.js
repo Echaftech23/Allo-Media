@@ -1,5 +1,6 @@
 const { validateForms } = require("../validations/userformsValidation");
 const sendEmail = require("../helpers/sendEmail");
+const validateToken = require("../validations/tokenValidation");
 
 const UserModel = require("../models/UserModel");
 const RoleModel = require("../models/RoleModel");
@@ -7,7 +8,7 @@ const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
-async function register(req, res) { 
+async function register(req, res) {
     // user data Validation :
     const { error } = validateForms.validateRegister(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
@@ -34,18 +35,16 @@ async function register(req, res) {
     });
 
     try {
-        
         const savedUser = await user.save();
         let userObject = { ...savedUser._doc };
         delete userObject.password;
 
-        // generate a token with 7min of expiration
+        // generate a token with 6min of expiration 
         const token = jwt.sign(userObject, process.env.TOKEN_SECRET, {
-            expiresIn: 700,
+            expiresIn: 600,
         });
-        
-        const queryParam = encodeURIComponent(token);
 
+        const queryParam = encodeURIComponent(token);
         let mailOptions = {
             from: process.env.EMAIL_USER,
             to: req.body.email,
@@ -55,7 +54,7 @@ async function register(req, res) {
                 <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
                     <h3>🎉 Welcome to AlloMedia! 🎉</h3>
                     <p>We're excited to have you on board. Please click the link below to activate your account:</p>
-                    <a href="http://127.0.0.1:3000/activate?token=${queryParam}" 
+                    <a href="${process.env.FRONTEND_URL}/auth/activate?token=${queryParam}"
                        style="display: inline-block; padding: 10px 20px; margin: 20px 0; font-size: 16px; color: white; background-color: #007BFF; text-decoration: none; border-radius: 5px;">
                         🔓 Activate your account
                     </a>
@@ -66,18 +65,42 @@ async function register(req, res) {
             `,
         };
         await sendEmail(mailOptions);
-
         res.status(201).json({
             success: "User registered successfully, verify your email",
         });
     } catch (err) {
-        return res.status(400).send(err);
+        return res.status(400).json({ error: err.message });
+    }
+}
+
+async function activate(req, res) {
+    // get token from url
+    const token = req.query.token;
+
+    if (!token) return res.status(401).json({ error: "Access denied" });
+
+    // verify token
+    const decoded_user = validateToken(token);
+    if (!decoded_user.success) {
+        return res.status(401).json({ error: "Access denied, token invalid" });
+    }
+    const _id = decoded_user.data._id;
+    // update user
+    try {
+        const updatedUser = await UserModel.updateOne(
+            { _id },
+            { is_verified: true }
+        );
+        res.json({
+            success: "Account activated successfully, you can now login",
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Something went wrong" });
     }
 }
 
 module.exports = {
     register,
+    activate,
 };
-
-
-
