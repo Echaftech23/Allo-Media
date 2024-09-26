@@ -73,6 +73,45 @@ async function register(req, res) {
     }
 }
 
+async function login(req, res) {
+    const { error } = validateForms.validateLogin(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    // Checking if the user exists
+    const user = await UserModel.findOne({ email: req.body.email }).populate(
+        "role"
+    );
+
+    if (!user) return res.status(400).json({ error: "Email is not found" });
+
+    // Checking if the password is correct
+    const validPass = await bcryptjs.compare(req.body.password, user.password);
+    if (!validPass) return res.status(400).json({ error: "Invalid password" });
+
+    // checking if the user is verified
+    if (!user.is_verified)
+        return res.status(401).json({ error: "Please verify your email" });
+
+    // Create and assign a token
+    const token = jwt.sign({ user }, process.env.TOKEN_SECRET);
+
+    const returnUser = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role.name,
+    };
+
+    // set token in cookie
+    res.cookie("authToken", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
+
+    res.json({ success: "Logged in successfully", user: returnUser });
+}
+
 async function activate(req, res) {
     // get token from url
     const token = req.query.token;
@@ -113,6 +152,7 @@ function logout(req, res) {
 
 module.exports = {
     register,
+    login,
     activate,
     logout,
 };

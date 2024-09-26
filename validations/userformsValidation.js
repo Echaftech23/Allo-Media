@@ -11,7 +11,16 @@ function validateRegister(body){
     return registerSchema.validate(body);
 }
 
+function validateLogin(body){
+    const loginSchema = Joi.object({
+        email: Joi.string().min(6).required().email(),
+        password: Joi.string().min(6).required(),
+    });
+    return loginSchema.validate(body);
+}
+
 
 module.exports.validateForms ={
     validateRegister,
+    validateLogin
 };
