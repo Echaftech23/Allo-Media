@@ -1,11 +1,13 @@
 const { validateForms } = require("../validations/userformsValidation");
-const sendEmail = require("../helpers/sendEmail");
+const sendEmail = require("../helpers/sendEmailHelper");
+const sendVerificationEmail = require("../helpers/emailTemplateHelper");
 const validateToken = require("../validations/tokenValidation");
 
 const UserModel = require("../models/UserModel");
 const RoleModel = require("../models/RoleModel");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const speakeasy = require("speakeasy");
 require("dotenv").config();
 
 async function register(req, res) {
@@ -36,35 +38,8 @@ async function register(req, res) {
 
     try {
         const savedUser = await user.save();
-        let userObject = { ...savedUser._doc };
-        delete userObject.password;
+        await sendVerificationEmail(savedUser, req.body.email, req.body.name);
 
-        // generate a token with 6min of expiration 
-        const token = jwt.sign(userObject, process.env.TOKEN_SECRET, {
-            expiresIn: 600,
-        });
-
-        const queryParam = encodeURIComponent(token);
-        let mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: req.body.email,
-            subject: "Account activation link",
-            text: `Hello ${req.body.name},`,
-            html: `
-                <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
-                    <h3>🎉 Welcome to AlloMedia! 🎉</h3>
-                    <p>We're excited to have you on board. Please click the link below to activate your account:</p>
-                    <a href="${process.env.FRONTEND_URL}/auth/activate?token=${queryParam}"
-                       style="display: inline-block; padding: 10px 20px; margin: 20px 0; font-size: 16px; color: white; background-color: #007BFF; text-decoration: none; border-radius: 5px;">
-                        🔓 Activate your account
-                    </a>
-                    <p>If you did not create an account, please ignore this email.</p>
-                    <p>Thank you,</p>
-                    <p>The AlloMedia Team</p>
-                </div>
-            `,
-        };
-        await sendEmail(mailOptions);
         res.status(201).json({
             success: "User registered successfully, verify your email",
         });
@@ -89,27 +64,34 @@ async function login(req, res) {
     if (!validPass) return res.status(400).json({ error: "Invalid password" });
 
     // checking if the user is verified
-    if (!user.is_verified)
-        return res.status(401).json({ error: "Please verify your email" });
+    if (!user.is_verified) {
+        await sendVerificationEmail(user, req.body.email, user.name);
+        return res.status(401).json({ error: "Please verify your email. A new verification email has been sent." });
+    }
 
-    // Create and assign a token
-    const token = jwt.sign({ user }, process.env.TOKEN_SECRET);
-
-    const returnUser = {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role.name,
-    };
-
-    // set token in cookie
-    res.cookie("authToken", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
+    // Generate OTP :
+    const otp = speakeasy.totp({
+        secret: process.env.OTP_SECRET,
+        encoding: 'base32',
+        expiresIn: 400,
     });
 
-    res.json({ success: "Logged in successfully", user: returnUser });
+    // Send OTP via email
+    let mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: req.body.email,
+        subject: "Your OTP Code",
+        text: `Your OTP code is ${otp}`,
+        html: `<p>Your OTP code is <strong>${otp}</strong></p>`
+    };
+    await sendEmail(mailOptions);
+
+    // Save OTP in user session or database (for demonstration, we'll use session)
+    req.session.otp = otp;
+    req.session.user = user;
+
+    res.status(200).json({ success: "OTP sent to your email" });
+
 }
 
 async function activate(req, res) {
@@ -154,5 +136,6 @@ module.exports = {
     register,
     login,
     activate,
+    verifyOtp,
     logout,
 };
