@@ -121,6 +121,48 @@ async function activate(req, res) {
     }
 }
 
+async function verifyOtp(req, res) {
+    const { otp } = req.body;
+
+    // Check if OTP is valid
+    const isValid = speakeasy.totp.verify({
+        secret: process.env.OTP_SECRET,
+        encoding: 'base32',
+        token: otp,
+        window: 1
+    });
+
+    if (!isValid) {
+        return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    // Retrieve user from session
+    const user = req.session.user;
+
+    // Create and assign a token
+    const token = jwt.sign({ user }, process.env.TOKEN_SECRET);
+
+    const returnUser = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role.name,
+    };
+
+    // Set token in cookie
+    res.cookie("authToken", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
+
+    // Clear OTP and user from session
+    req.session.otp = null;
+    req.session.user = null;
+
+    res.json({ success: "Logged in successfully", user: returnUser });
+}
+
 function logout(req, res) {
     req.user = null;
     req.cookies["authToken"] = null;
