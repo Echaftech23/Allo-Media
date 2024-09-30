@@ -15,13 +15,12 @@ require('./config/db').connect();
 // Middleware :
 app.use(express.json());
 
-// Configure session middleware
 app.use(session({
   secret: 'your_secret_key',
   resave: false,
   saveUninitialized: true,
-  cookie: { secure: false } 
-}));
+  cookie: { secure: false, maxAge: 600000 } 
+}))
 
 // Routes :
 app.use('/auth', authRoutes);

@@ -1,3 +1,6 @@
+const jwt = require("jsonwebtoken");
+const sendEmail = require("./sendEmailHelper");
+
 async function sendVerificationEmail(user, email, name) {
     // Generate a new token for email verification
     const userObject = { ...user._doc };

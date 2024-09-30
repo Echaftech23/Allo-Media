@@ -1,13 +1,13 @@
 const { validateForms } = require("../validations/userformsValidation");
-const sendEmail = require("../helpers/sendEmailHelper");
-const sendVerificationEmail = require("../helpers/emailTemplateHelper");
+const { sendVerificationEmail } = require("../helpers/emailTemplateHelper");
 const validateToken = require("../validations/tokenValidation");
+const sendEmail = require("../helpers/sendEmailHelper");
+const speakeasy = require("speakeasy");
+const bcryptjs = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const UserModel = require("../models/UserModel");
 const RoleModel = require("../models/RoleModel");
-const bcryptjs = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const speakeasy = require("speakeasy");
 require("dotenv").config();
 
 async function register(req, res) {
@@ -52,46 +52,110 @@ async function login(req, res) {
     const { error } = validateForms.validateLogin(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
-    // Checking if the user exists
-    const user = await UserModel.findOne({ email: req.body.email }).populate(
-        "role"
-    );
+    const user = await UserModel.findOne({ email: req.body.email }).populate("role");
+    if (!user) return res.status(400).json({ error: "Invalid email or password" });
 
-    if (!user) return res.status(400).json({ error: "Email is not found" });
-
-    // Checking if the password is correct
     const validPass = await bcryptjs.compare(req.body.password, user.password);
-    if (!validPass) return res.status(400).json({ error: "Invalid password" });
+    if (!validPass) return res.status(400).json({ error: "Invalid email or password" });
 
-    // checking if the user is verified
     if (!user.is_verified) {
         await sendVerificationEmail(user, req.body.email, user.name);
         return res.status(401).json({ error: "Please verify your email. A new verification email has been sent." });
     }
 
-    // Generate OTP :
-    const otp = speakeasy.totp({
+    const lastLoginDate = user.lastLogin || new Date(0);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const require2FA = lastLoginDate < thirtyDaysAgo;
+
+    if (require2FA) {
+        const otp = speakeasy.totp({
+            secret: process.env.OTP_SECRET,
+            encoding: 'base32',
+            step: 300
+        });
+
+        const otpToken = jwt.sign({
+            userId: user._id,
+            otpGeneratedAt: Date.now()
+        }, process.env.OTP_TOKEN_SECRET, { expiresIn: '5m' });
+
+        let mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: req.body.email,
+            subject: "Your OTP Code",
+            html: `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <h2 style="color: #4CAF50;">Your OTP Code</h2>
+                    <p>Enter the following OTP code to complete the login process:</p>
+                    <p style="font-size: 1.5em; font-weight: bold; color: #4CAF50;">${otp}</p>
+                    <p>This code will expire in 5 minutes.</p>
+                    <p>If you did not request this code, please ignore this email.</p>
+                </div>
+            `
+        };
+        await sendEmail(mailOptions);
+
+        return res.status(200).json({ success: "OTP sent to your email", otpToken });
+    } else {
+        return generateTokenAndRespond(res, user);
+    }
+}
+
+async function verifyOtp(req, res) {
+    const { otp, otpToken } = req.body;
+
+    if (!otpToken) {
+        return res.status(400).json({ error: "OTP token is required" });
+    }
+
+    let decoded;
+    try {
+        decoded = jwt.verify(otpToken, process.env.OTP_TOKEN_SECRET);
+    } catch (error) {
+        return res.status(400).json({ error: "Invalid or expired OTP token" });
+    }
+
+    const isValid = speakeasy.totp.verify({
         secret: process.env.OTP_SECRET,
         encoding: 'base32',
-        expiresIn: 400,
+        token: otp,
+        window: 1,
+        step: 300
     });
 
-    // Send OTP via email
-    let mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: req.body.email,
-        subject: "Your OTP Code",
-        text: `Your OTP code is ${otp}`,
-        html: `<p>Your OTP code is <strong>${otp}</strong></p>`
+    if (!isValid) {
+        return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    const user = await UserModel.findById(decoded.userId);
+    if (!user) {
+        return res.status(400).json({ error: "User not found" });
+    }
+
+    return generateTokenAndRespond(res, user);
+}
+
+async function generateTokenAndRespond(res, user) {
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = jwt.sign({ userId: user._id }, process.env.TOKEN_SECRET, { expiresIn: '1d' });
+
+    const returnUser = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role.name,
     };
-    await sendEmail(mailOptions);
 
-    // Save OTP in user session or database (for demonstration, we'll use session)
-    req.session.otp = otp;
-    req.session.user = user;
+    res.cookie("authToken", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 24 * 60 * 60 * 1000
+    });
 
-    res.status(200).json({ success: "OTP sent to your email" });
-
+    res.json({ success: "Logged in successfully", user: returnUser });
 }
 
 async function activate(req, res) {
@@ -119,48 +183,6 @@ async function activate(req, res) {
         console.error(e);
         res.status(500).json({ error: "Something went wrong" });
     }
-}
-
-async function verifyOtp(req, res) {
-    const { otp } = req.body;
-
-    // Check if OTP is valid
-    const isValid = speakeasy.totp.verify({
-        secret: process.env.OTP_SECRET,
-        encoding: 'base32',
-        token: otp,
-        window: 1
-    });
-
-    if (!isValid) {
-        return res.status(400).json({ error: "Invalid OTP" });
-    }
-
-    // Retrieve user from session
-    const user = req.session.user;
-
-    // Create and assign a token
-    const token = jwt.sign({ user }, process.env.TOKEN_SECRET);
-
-    const returnUser = {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role.name,
-    };
-
-    // Set token in cookie
-    res.cookie("authToken", token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-    });
-
-    // Clear OTP and user from session
-    req.session.otp = null;
-    req.session.user = null;
-
-    res.json({ success: "Logged in successfully", user: returnUser });
 }
 
 function logout(req, res) {
