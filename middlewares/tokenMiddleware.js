@@ -1,6 +1,5 @@
 const validateToken = require("../validations/tokenValidation");
 function checkTokenMiddleware(req, res, next) {
-    console.log("checkTokenMiddleware");
     const token = req.params.token || req.cookies["authToken"];
 
     console.log("token is validdd");
@@ -14,7 +13,6 @@ function checkTokenMiddleware(req, res, next) {
     if (!decoded_user.success) {
         return res.status(401).json({ error: "Access denied" });
     }
-    console.log("token is valid");
     req.user = decoded_user.data;
     next();
 }

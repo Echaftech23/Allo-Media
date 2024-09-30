@@ -32,8 +32,29 @@ function validateLogin(body){
     return loginSchema.validate(body);
 }
 
+function validateEmail(body){
+    const emailSchema = Joi.object({
+        email: Joi.string().min(6).required().email(),
+    });
+    return emailSchema.validate(body);
+}
+
+// validate password with confirm password
+function validatePassword(body){
+    const passwordSchema = Joi.object({
+        // password should match confirm password
+        password: Joi.string().min(6).required().valid(Joi.ref('confirmPassword')).messages({
+            'any.only': 'password does not match'
+        }),
+        confirmPassword: Joi.string().min(6).required(),
+
+    });
+    return passwordSchema.validate(body);
+}
 
 module.exports.validateForms ={
     validateRegister,
-    validateLogin
+    validateLogin,
+    validateEmail,
+    validatePassword
 };

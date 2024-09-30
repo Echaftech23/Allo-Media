@@ -196,10 +196,94 @@ function logout(req, res) {
     res.json({ success: "Logged out successfully" });
 }
 
+
+async function forgotPassword(req, res) {res
+    const { error } = validateForms.validateEmail(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    // Checking if the user exists
+    const user = await UserModel.findOne({ email: req.body.email }).populate(
+        "role"
+    );
+    if (!user) return res.status(400).json({ error: "Email is not found" });
+
+    try {
+        let payload = {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role.name,
+        };
+
+        // generate a token with 600 seconds of expiration
+        const token = jwt.sign(payload, process.env.TOKEN_SECRET, { expiresIn: 600, });
+        
+        let mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: req.body.email,
+          subject: "Password Reset Request",
+          text: `Hello ${user.name}.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+              <h2 style="color: #4CAF50;">Password Reset Request</h2>
+              <p>Hello ${req.body.name},</p>
+              <p>We received a request to reset your password. Click the link below to choose a new password:</p>
+              <p>
+                <a href="${process.env.FRONTEND_URL}/resetpassword?token=${token}" 
+                   style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">
+                  Reset Your Password
+                </a>
+              </p>
+              <p>If you did not request a password reset, please ignore this email or contact support if you have questions.</p>
+              <p>Thanks,</p>
+              <p>The Support Team</p>
+            </div>
+          `,
+        };
+        await sendEmail(mailOptions);
+
+        res.json({ success: "Check your email to reset your password!!" });
+    } catch (e) {
+        console.log(e);
+        res.status(400).json({ error: "Something went wrong" });
+    }
+}
+
+async function resetPassword(req, res) {
+    
+    const user = req.user;
+    const { error } = validateForms.validatePassword(req.body);
+
+    if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+    }
+
+    try {
+        // Generate a salt
+        const salt = await bcryptjs.genSalt(10);
+
+        // Hash the new password with the generated salt
+        const hashedPassword = await bcryptjs.hash(req.body.password, salt);
+
+        // Update the user's password
+        const updatedUser = await UserModel.updateOne(
+            { _id: user._id },
+            { password: hashedPassword }
+        );
+    } catch (e) {
+        console.log(e);
+        return res.status(400).json({ error: "Something went wrong" });
+    }
+
+    res.json({ success: "Password reset successfully" });
+}
+
 module.exports = {
     register,
     login,
     activate,
     verifyOtp,
     logout,
+    forgotPassword,
+    resetPassword
 };
