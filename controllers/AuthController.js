@@ -1,11 +1,13 @@
 const { validateForms } = require("../validations/userformsValidation");
-const sendEmail = require("../helpers/sendEmail");
+const { sendVerificationEmail } = require("../helpers/emailTemplateHelper");
 const validateToken = require("../validations/tokenValidation");
+const sendEmail = require("../helpers/sendEmailHelper");
+const speakeasy = require("speakeasy");
+const bcryptjs = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const UserModel = require("../models/UserModel");
 const RoleModel = require("../models/RoleModel");
-const bcryptjs = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 async function register(req, res) {
@@ -36,41 +38,124 @@ async function register(req, res) {
 
     try {
         const savedUser = await user.save();
-        let userObject = { ...savedUser._doc };
-        delete userObject.password;
+        await sendVerificationEmail(savedUser, req.body.email, req.body.name);
 
-        // generate a token with 6min of expiration 
-        const token = jwt.sign(userObject, process.env.TOKEN_SECRET, {
-            expiresIn: 600,
-        });
-
-        const queryParam = encodeURIComponent(token);
-        let mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: req.body.email,
-            subject: "Account activation link",
-            text: `Hello ${req.body.name},`,
-            html: `
-                <div style="font-family: Arial, sans-serif; text-align: center; padding: 20px;">
-                    <h3>🎉 Welcome to AlloMedia! 🎉</h3>
-                    <p>We're excited to have you on board. Please click the link below to activate your account:</p>
-                    <a href="${process.env.FRONTEND_URL}/auth/activate?token=${queryParam}"
-                       style="display: inline-block; padding: 10px 20px; margin: 20px 0; font-size: 16px; color: white; background-color: #007BFF; text-decoration: none; border-radius: 5px;">
-                        🔓 Activate your account
-                    </a>
-                    <p>If you did not create an account, please ignore this email.</p>
-                    <p>Thank you,</p>
-                    <p>The AlloMedia Team</p>
-                </div>
-            `,
-        };
-        await sendEmail(mailOptions);
         res.status(201).json({
             success: "User registered successfully, verify your email",
         });
     } catch (err) {
         return res.status(400).json({ error: err.message });
     }
+}
+
+async function login(req, res) {
+    const { error } = validateForms.validateLogin(req.body);
+    if (error) return res.status(400).json({ error: error.details[0].message });
+
+    const user = await UserModel.findOne({ email: req.body.email }).populate("role");
+    if (!user) return res.status(400).json({ error: "Invalid email or password" });
+
+    const validPass = await bcryptjs.compare(req.body.password, user.password);
+    if (!validPass) return res.status(400).json({ error: "Invalid email or password" });
+
+    if (!user.is_verified) {
+        await sendVerificationEmail(user, req.body.email, user.name);
+        return res.status(401).json({ error: "Please verify your email. A new verification email has been sent." });
+    }
+
+    const lastLoginDate = user.lastLogin || new Date(0);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const require2FA = lastLoginDate < thirtyDaysAgo;
+
+    if (require2FA) {
+        const otp = speakeasy.totp({
+            secret: process.env.OTP_SECRET,
+            encoding: 'base32',
+            step: 300
+        });
+
+        const otpToken = jwt.sign({
+            userId: user._id,
+            otpGeneratedAt: Date.now()
+        }, process.env.OTP_TOKEN_SECRET, { expiresIn: '5m' });
+
+        let mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: req.body.email,
+            subject: "Your OTP Code",
+            html: `
+                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <h2 style="color: #4CAF50;">Your OTP Code</h2>
+                    <p>Enter the following OTP code to complete the login process:</p>
+                    <p style="font-size: 1.5em; font-weight: bold; color: #4CAF50;">${otp}</p>
+                    <p>This code will expire in 5 minutes.</p>
+                    <p>If you did not request this code, please ignore this email.</p>
+                </div>
+            `
+        };
+        await sendEmail(mailOptions);
+
+        return res.status(200).json({ success: "OTP sent to your email", otpToken });
+    } else {
+        return generateTokenAndRespond(res, user);
+    }
+}
+
+async function verifyOtp(req, res) {
+    const { otp, otpToken } = req.body;
+
+    if (!otpToken) {
+        return res.status(400).json({ error: "OTP token is required" });
+    }
+
+    let decoded;
+    try {
+        decoded = jwt.verify(otpToken, process.env.OTP_TOKEN_SECRET);
+    } catch (error) {
+        return res.status(400).json({ error: "Invalid or expired OTP token" });
+    }
+
+    const isValid = speakeasy.totp.verify({
+        secret: process.env.OTP_SECRET,
+        encoding: 'base32',
+        token: otp,
+        window: 1,
+        step: 300
+    });
+
+    if (!isValid) {
+        return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    const user = await UserModel.findById(decoded.userId);
+    if (!user) {
+        return res.status(400).json({ error: "User not found" });
+    }
+
+    return generateTokenAndRespond(res, user);
+}
+
+async function generateTokenAndRespond(res, user) {
+    user.lastLogin = new Date();
+    await user.save();
+
+    const token = jwt.sign({ userId: user._id }, process.env.TOKEN_SECRET, { expiresIn: '1d' });
+
+    const returnUser = {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role.name,
+    };
+
+    res.cookie("authToken", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 24 * 60 * 60 * 1000
+    });
+
+    res.json({ success: "Logged in successfully", user: returnUser });
 }
 
 async function activate(req, res) {
@@ -113,6 +198,8 @@ function logout(req, res) {
 
 module.exports = {
     register,
+    login,
     activate,
+    verifyOtp,
     logout,
 };
