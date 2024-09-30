@@ -1,5 +1,7 @@
 const express = require('express');
+const session = require('express-session');
 const authRoutes = require('./routes/authRoutes');
+require('dotenv').config();
 // const userRoutes = require('./routes/userRoutes');
 // const deliveryRoutes = require('./routes/deliveryRoutes');
 // const managerRoutes = require('./routes/managerRoutes');
@@ -12,6 +14,13 @@ require('./config/db').connect();
 
 // Middleware :
 app.use(express.json());
+
+app.use(session({
+  secret: 'your_secret_key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false, maxAge: 600000 } 
+}))
 
 // Routes :
 app.use('/auth', authRoutes);
