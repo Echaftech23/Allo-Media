@@ -1,7 +1,7 @@
 const { validateForms } = require("../validations/userformsValidation");
 const { sendVerificationEmail } = require("../helpers/emailTemplateHelper");
 const validateToken = require("../validations/tokenValidation");
-const sendEmail = require("../helpers/sendEmailHelper");
+const {sendEmail} = require("../helpers/sendEmailHelper");
 const speakeasy = require("speakeasy");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -48,6 +48,33 @@ async function register(req, res) {
     }
 }
 
+async function activate(req, res) {
+    // get token from url
+    const token = req.query.token;
+
+    if (!token) return res.status(401).json({ error: "Access denied" });
+
+    // verify token
+    const decoded_user = validateToken(token);
+    if (!decoded_user.success) {
+        return res.status(401).json({ error: "Access denied, token invalid" });
+    }
+    const _id = decoded_user.data._id;
+    // update user
+    try {
+        const updatedUser = await UserModel.updateOne(
+            { _id },
+            { is_verified: true }
+        );
+        res.json({
+            success: "Account activated successfully, you can now login",
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Something went wrong" });
+    }
+}
+
 async function login(req, res) {
     const { error } = validateForms.validateLogin(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
@@ -59,7 +86,8 @@ async function login(req, res) {
     if (!validPass) return res.status(400).json({ error: "Invalid email or password" });
 
     if (!user.is_verified) {
-        await sendVerificationEmail(user, req.body.email, user.name);
+        const emailSent = await sendVerificationEmail(user, req.body.email, user.name);
+        if (emailSent.error) return res.status(500).json({error: emailSent.error});
         return res.status(401).json({ error: "Please verify your email. A new verification email has been sent." });
     }
 
@@ -155,47 +183,8 @@ async function generateTokenAndRespond(res, user) {
         maxAge: 24 * 60 * 60 * 1000
     });
 
-    res.json({ success: "Logged in successfully", user: returnUser });
+    return res.status(200).json({ success: "Logged in successfully", user: returnUser });
 }
-
-async function activate(req, res) {
-    // get token from url
-    const token = req.query.token;
-
-    if (!token) return res.status(401).json({ error: "Access denied" });
-
-    // verify token
-    const decoded_user = validateToken(token);
-    if (!decoded_user.success) {
-        return res.status(401).json({ error: "Access denied, token invalid" });
-    }
-    const _id = decoded_user.data._id;
-    // update user
-    try {
-        const updatedUser = await UserModel.updateOne(
-            { _id },
-            { is_verified: true }
-        );
-        res.json({
-            success: "Account activated successfully, you can now login",
-        });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Something went wrong" });
-    }
-}
-
-function logout(req, res) {
-    req.user = null;
-    req.cookies["authToken"] = null;
-    res.cookie("authToken", "", {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-    });
-    res.json({ success: "Logged out successfully" });
-}
-
 
 async function forgotPassword(req, res) {res
     const { error } = validateForms.validateEmail(req.body);
@@ -275,7 +264,18 @@ async function resetPassword(req, res) {
         return res.status(400).json({ error: "Something went wrong" });
     }
 
-    res.json({ success: "Password reset successfully" });
+    return res.status(200).json({ success: "Password reset successfully" });
+}
+
+function logout(req, res) {
+    req.user = null;
+    req.cookies["authToken"] = null;
+    res.cookie("authToken", "", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
+    res.json({ success: "Logged out successfully" });
 }
 
 module.exports = {
