@@ -1,7 +1,7 @@
 const { validateForms } = require("../validations/userformsValidation");
 const { sendVerificationEmail } = require("../helpers/emailTemplateHelper");
 const validateToken = require("../validations/tokenValidation");
-const sendEmail = require("../helpers/sendEmailHelper");
+const {sendEmail} = require("../helpers/sendEmailHelper");
 const speakeasy = require("speakeasy");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -45,6 +45,33 @@ async function register(req, res) {
         });
     } catch (err) {
         return res.status(400).json({ error: err.message });
+    }
+}
+
+async function activate(req, res) {
+    // get token from url
+    const token = req.query.token;
+
+    if (!token) return res.status(401).json({ error: "Access denied" });
+
+    // verify token
+    const decoded_user = validateToken(token);
+    if (!decoded_user.success) {
+        return res.status(401).json({ error: "Access denied, token invalid" });
+    }
+    const _id = decoded_user.data._id;
+    // update user
+    try {
+        const updatedUser = await UserModel.updateOne(
+            { _id },
+            { is_verified: true }
+        );
+        res.json({
+            success: "Account activated successfully, you can now login",
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Something went wrong" });
     }
 }
 
@@ -156,45 +183,7 @@ async function generateTokenAndRespond(res, user) {
         maxAge: 24 * 60 * 60 * 1000
     });
 
-    res.json({ success: "Logged in successfully", user: returnUser });
-}
-
-async function activate(req, res) {
-    // get token from url
-    const token = req.query.token;
-
-    if (!token) return res.status(401).json({ error: "Access denied" });
-
-    // verify token
-    const decoded_user = validateToken(token);
-    if (!decoded_user.success) {
-        return res.status(401).json({ error: "Access denied, token invalid" });
-    }
-    const _id = decoded_user.data._id;
-    // update user
-    try {
-        const updatedUser = await UserModel.updateOne(
-            { _id },
-            { is_verified: true }
-        );
-        res.json({
-            success: "Account activated successfully, you can now login",
-        });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Something went wrong" });
-    }
-}
-
-function logout(req, res) {
-    req.user = null;
-    req.cookies["authToken"] = null;
-    res.cookie("authToken", "", {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",
-    });
-    res.json({ success: "Logged out successfully" });
+    return res.status(200).json({ success: "Logged in successfully", user: returnUser });
 }
 
 async function forgotPassword(req, res) {res
@@ -276,6 +265,17 @@ async function resetPassword(req, res) {
     }
 
     res.json({ success: "Password reset successfully" });
+}
+
+function logout(req, res) {
+    req.user = null;
+    req.cookies["authToken"] = null;
+    res.cookie("authToken", "", {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+    });
+    res.json({ success: "Logged out successfully" });
 }
 
 module.exports = {
