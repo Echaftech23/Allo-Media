@@ -22,6 +22,10 @@ const schema = {
         type: Boolean,
         default: false
     },
+    lastLogin: {
+        type: Date,
+        default: null,
+    },
     date: {
         type: Date,
         required: true,
