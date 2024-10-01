@@ -59,7 +59,8 @@ async function login(req, res) {
     if (!validPass) return res.status(400).json({ error: "Invalid email or password" });
 
     if (!user.is_verified) {
-        await sendVerificationEmail(user, req.body.email, user.name);
+        const emailSent = await sendVerificationEmail(user, req.body.email, user.name);
+        if (emailSent.error) return res.status(500).json({error: emailSent.error});
         return res.status(401).json({ error: "Please verify your email. A new verification email has been sent." });
     }
 
@@ -195,7 +196,6 @@ function logout(req, res) {
     });
     res.json({ success: "Logged out successfully" });
 }
-
 
 async function forgotPassword(req, res) {res
     const { error } = validateForms.validateEmail(req.body);
