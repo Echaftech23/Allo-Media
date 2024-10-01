@@ -264,7 +264,7 @@ async function resetPassword(req, res) {
         return res.status(400).json({ error: "Something went wrong" });
     }
 
-    res.json({ success: "Password reset successfully" });
+    return res.status(200).json({ success: "Password reset successfully" });
 }
 
 function logout(req, res) {
