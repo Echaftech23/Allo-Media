@@ -28,12 +28,14 @@ app.use('/auth', authRoutes);
 // app.use('/delivery', deliveryRoutes);
 // app.use('/manager', managerRoutes);
 
+// app.listen(PORT, () => {
+//   console.log(`Server is running on port ${PORT}`);
+// });
+
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
   });
 }
-
-
 
 module.exports = app;
