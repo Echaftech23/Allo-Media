@@ -87,7 +87,6 @@ async function login(req, res) {
 
     if (!user.is_verified) {
         const emailSent = await sendVerificationEmail(user, req.body.email, user.name);
-        if (emailSent.error) return res.status(500).json({error: emailSent.error});
         return res.status(401).json({ error: "Please verify your email. A new verification email has been sent." });
     }
 
@@ -163,7 +162,7 @@ async function verifyOtp(req, res) {
     return generateTokenAndRespond(res, user);
 }
 
-async function generateTokenAndRespond(res, user) {
+async function generateTokenAndRespond(res, user) { 
     user.lastLogin = new Date();
     await user.save();
 
@@ -218,7 +217,7 @@ async function forgotPassword(req, res) {res
               <p>Hello ${req.body.name},</p>
               <p>We received a request to reset your password. Click the link below to choose a new password:</p>
               <p>
-                <a href="${process.env.FRONTEND_URL}/resetpassword?token=${token}" 
+                <a href="${process.env.FRONTEND_URL}/reset-password?token=${token}" 
                    style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">
                   Reset Your Password
                 </a>

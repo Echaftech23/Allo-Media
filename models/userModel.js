@@ -24,7 +24,7 @@ const schema = {
     },
     lastLogin: {
         type: Date,
-        default: Date
+        default: null,
     },
     date: {
         type: Date,
