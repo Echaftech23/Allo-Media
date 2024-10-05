@@ -118,6 +118,7 @@ Create a `.env` file in the root directory with the following variables:
 ```
 PORT=3000
 FRONTEND_URL=http://localhost:3000
+BACKEND_URL=http://localhost:3001
 MONGODB_URI=your_mongodb_connection_string
 TOKEN_SECRET=your_jwt_secret
 EMAIL_USER=your_email_address

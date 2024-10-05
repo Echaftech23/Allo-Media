@@ -34,6 +34,7 @@ async function register(req, res) {
         email: req.body.email,
         password: hashedPassword,
         role: role._id,
+        phone: req.body.phone,
     });
 
     try {
@@ -66,9 +67,7 @@ async function activate(req, res) {
             { _id },
             { is_verified: true }
         );
-        res.json({
-            success: "Account activated successfully, you can now login",
-        });
+        res.redirect(`${process.env.FRONTEND_URL}/login`);
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: "Something went wrong" });
@@ -92,7 +91,7 @@ async function login(req, res) {
 
     const lastLoginDate = user.lastLogin || new Date(0);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const require2FA = lastLoginDate < thirtyDaysAgo;
+    const require2FA = !user.lastLogin || lastLoginDate < thirtyDaysAgo;
 
     if (require2FA) {
         const otp = speakeasy.totp({
@@ -182,7 +181,7 @@ async function generateTokenAndRespond(res, user) {
         maxAge: 24 * 60 * 60 * 1000
     });
 
-    return res.status(200).json({ success: "Logged in successfully", user: returnUser });
+    return res.status(200).json({ success: "Logged in successfully", user: returnUser, token });
 }
 
 async function forgotPassword(req, res) {res
@@ -217,7 +216,7 @@ async function forgotPassword(req, res) {res
               <p>Hello ${req.body.name},</p>
               <p>We received a request to reset your password. Click the link below to choose a new password:</p>
               <p>
-                <a href="${process.env.FRONTEND_URL}/reset-password?token=${token}" 
+                <a href="${process.env.BACKEND_URL}/reset-password?token=${token}" 
                    style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">
                   Reset Your Password
                 </a>

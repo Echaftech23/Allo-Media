@@ -2,6 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const authRoutes = require('./routes/authRoutes');
 require('dotenv').config();
+const cors = require('cors');
 // const userRoutes = require('./routes/userRoutes');
 // const deliveryRoutes = require('./routes/deliveryRoutes');
 // const managerRoutes = require('./routes/managerRoutes');
@@ -14,6 +15,7 @@ require('./config/db').connect();
 
 // Middleware :
 app.use(express.json());
+app.use(cors());
 
 app.use(session({
   secret: 'your_secret_key',
@@ -27,10 +29,6 @@ app.use('/auth', authRoutes);
 // app.use('/user', userRoutes);
 // app.use('/delivery', deliveryRoutes);
 // app.use('/manager', managerRoutes);
-
-// app.listen(PORT, () => {
-//   console.log(`Server is running on port ${PORT}`);
-// });
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
