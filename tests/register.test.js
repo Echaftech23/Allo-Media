@@ -15,8 +15,9 @@ describe('POST /auth/register', () => {
     it('should return 201 OK and register a new user', async () => {
         const userData = {
             name: "Echafai Rachid",
-            email: "echfaiechafai20221@gmail.com",
-            password: "Echafai@echafai2021",
+            email: "echfaiechafai2021@gmail.com",
+            password: "Echafai-2021",
+            confirmPassword: "Echafai-2021",
             role: "client"
         };
         const response = await request(app)
@@ -31,8 +32,9 @@ describe('POST /auth/register', () => {
     it('should return 400 Bad Request if the user already exists', async () => {
         const userData = {
             name: "Echafai Rachid",
-            email: "echfaiechafai20221@gmail.com",
-            password: "Echafai@echafai2021",
+            email: "echfaiechafai2021@gmail.com",
+            password: "Echafai-2021",
+            confirmPassword: "Echafai-2021",
             role: "client"
         };
         const response = await request(app)
@@ -47,8 +49,9 @@ describe('POST /auth/register', () => {
     it('should return 400 if role does not exist', async () => {
         const userData = {
             name: "Echafai Rachid",
-            email: "echfaiechafai202e1@gmail.com",
-            password: "Echafai@echafai2021",
+            email: "echfaiechafai2022@gmail.com",
+            password: "Echafai-2021",
+            confirmPassword: "Echafai-2021",
             role: "nonexistentrole"
         };
         const res = await request(app)

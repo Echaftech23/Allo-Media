@@ -21,7 +21,8 @@ router.get("/activate", authController.activate);
 router.post("/login", otpLimiter, authController.login);
 router.post("/verify-otp", otpLimiter, authController.verifyOtp);
 router.post("/forgot-password", otpLimiter, authController.forgotPassword);
-router.post("/reset-password/:token", tokenMiddleware, authController.resetPassword);
+router.post("/reset-password/:token", authController.resetPassword);
+router.get("/me", tokenMiddleware, authController.me);
 router.post("/logout", authController.logout);
 
 module.exports = router;

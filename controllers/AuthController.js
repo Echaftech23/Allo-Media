@@ -121,7 +121,7 @@ async function login(req, res) {
         };
         await sendEmail(mailOptions);
 
-        return res.status(200).json({ success: "OTP sent to your email", otpToken });
+        return res.status(200).json({ success: "OTP sent to your email", otpToken, require2FA: true });
     } else {
         return generateTokenAndRespond(res, user);
     }
@@ -203,20 +203,19 @@ async function forgotPassword(req, res) {res
         };
 
         // generate a token with 600 seconds of expiration
-        const token = jwt.sign(payload, process.env.TOKEN_SECRET, { expiresIn: 600, });
+        const resetToken = jwt.sign(payload, process.env.TOKEN_SECRET, { expiresIn: 600, });
         
         let mailOptions = {
           from: process.env.EMAIL_USER,
           to: req.body.email,
           subject: "Password Reset Request",
-          text: `Hello ${user.name}.`,
           html: `
             <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
               <h2 style="color: #4CAF50;">Password Reset Request</h2>
-              <p>Hello ${req.body.name},</p>
+              <p>Hello ${user.name},</p>
               <p>We received a request to reset your password. Click the link below to choose a new password:</p>
               <p>
-                <a href="${process.env.BACKEND_URL}/reset-password?token=${token}" 
+                <a href="${process.env.FRONTEND_URL}/reset-password/${resetToken}" 
                    style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">
                   Reset Your Password
                 </a>
@@ -236,9 +235,40 @@ async function forgotPassword(req, res) {res
     }
 }
 
-async function resetPassword(req, res) {
+// async function resetPassword(req, res) {
     
-    const user = req.user;
+//     const user = req.user;
+//     const { error } = validateForms.validatePassword(req.body);
+
+//     if (error) {
+//         return res.status(400).json({ error: error.details[0].message });
+//     }
+
+//     try {
+//         // Generate a salt
+//         const salt = await bcryptjs.genSalt(10);
+
+//         // Hash the new password with the generated salt
+//         const hashedPassword = await bcryptjs.hash(req.body.password, salt);
+
+//         // Update the user's password
+//         const updatedUser = await UserModel.updateOne(
+//             { _id: user._id },
+//             { password: hashedPassword }
+//         );
+//     } catch (e) {
+//         console.log(e);
+//         return res.status(400).json({ error: "Something went wrong" });
+//     }
+
+//     return res.status(200).json({ success: "Password reset successfully" });
+// }
+
+async function resetPassword(req, res) {
+    const { token } = req.params;
+    // const { password, confirmconfirmPassword } = req.body;
+
+    if (!token) return res.status(401).json({ error: "Access denied" });
     const { error } = validateForms.validatePassword(req.body);
 
     if (error) {
@@ -246,23 +276,32 @@ async function resetPassword(req, res) {
     }
 
     try {
+        // verify token
+        const decoded_user = validateToken(token);
+        if (!decoded_user.success) {
+            return res.status(401).json({ error: "Invalid or expired password reset token" });
+        }
+
+        console.log("user decode",decoded_user);
+        
+        const _id = decoded_user.data._id;
+
         // Generate a salt
         const salt = await bcryptjs.genSalt(10);
 
-        // Hash the new password with the generated salt
         const hashedPassword = await bcryptjs.hash(req.body.password, salt);
 
-        // Update the user's password
+        // Update the user's password and clear the reset token fields
         const updatedUser = await UserModel.updateOne(
-            { _id: user._id },
+            { _id: _id },
             { password: hashedPassword }
         );
+
+        res.status(200).json({ success: "Password reset successfully" });
     } catch (e) {
         console.log(e);
         return res.status(400).json({ error: "Something went wrong" });
     }
-
-    return res.status(200).json({ success: "Password reset successfully" });
 }
 
 function logout(req, res) {
@@ -276,6 +315,11 @@ function logout(req, res) {
     res.json({ success: "Logged out successfully" });
 }
 
+function me(req, res) {
+    console.log(req.user);
+    res.json({ user: req.user });
+}
+
 module.exports = {
     register,
     login,
@@ -283,5 +327,6 @@ module.exports = {
     verifyOtp,
     logout,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    me,
 };
