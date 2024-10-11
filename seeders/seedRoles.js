@@ -1,4 +1,4 @@
-const Role = require('../models/RoleModel'); 
+const Role = require('../models/roleModel'); 
 
 async function seedRoles() {
     const roles = [
@@ -22,5 +22,7 @@ async function seedRoles() {
         console.error('Error seeding roles:', error);
     }
 }
+
+seedRoles();
 
 module.exports = seedRoles;

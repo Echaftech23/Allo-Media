@@ -1,8 +1,8 @@
 const request = require('supertest');
 const app = require('../app');
 const mongoose = require("mongoose"); 
-const UserModel = require('../models/UserModel');
-const RoleModel = require('../models/RoleModel');
+const UserModel = require('../models/userModel');
+const RoleModel = require('../models/roleModel');
 const bcryptjs = require('bcryptjs');
 
 // Mock the sendVerificationEmail function
@@ -33,13 +33,14 @@ describe('POST /auth/login', () => {
 
         // Create a test user
         const hashedPassword = await bcryptjs.hash('Echafai@echafai2021', 10);
-        await UserModel.create({
+        const user = await UserModel.create({
             name: "Echafai Rachid",
             email: "echfaiechafai20221@gmail.com",
             password: hashedPassword,
             role: clientRoleId,
             is_verified: true,
-            lastLogin: new Date()
+            lastLogin: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+
         });
 
         await UserModel.create({
@@ -69,7 +70,7 @@ describe('POST /auth/login', () => {
             .set('Accept', 'application/json');
 
         expect(response.statusCode).toBe(200);
-        expect(response.body).toHaveProperty('user');
+        expect(response.body).toHaveProperty(['token']);
     });
 
     it('should return 400 Bad Request if the email is invalid', async () => {

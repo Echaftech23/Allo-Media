@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "test": "jest"
+    "test": "jest",
+    "seed:users": "node seeders/seedUsers.js",
+    "seed:roles": "node seeders/seedRoles.js"
   },
   "keywords": [],
   "author": "",
