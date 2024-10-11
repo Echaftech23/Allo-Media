@@ -7,8 +7,7 @@
     "start": "node app.js",
     "dev": "nodemon app.js",
     "test": "jest",
-    "seed:users": "node seeders/seedUsers.js",
-    "seed:roles": "node seeders/seedRoles.js"
+    "seed": "node seeders/index.js"
   },
   "keywords": [],
   "author": "",
