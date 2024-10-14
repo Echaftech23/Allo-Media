@@ -52,14 +52,12 @@ async function register(req, res) {
 async function activate(req, res) {
   // get token from url
   const token = req.query.token;
-
   if (!token) return res.status(401).json({ error: "Access denied" });
 
   // verify token
   const decoded_user = validateToken(token);
-  if (!decoded_user.success) {
+  if (!decoded_user.success)
     return res.status(401).json({ error: "Access denied, token invalid" });
-  }
   const _id = decoded_user.data._id;
   // update user
   try {
@@ -74,84 +72,102 @@ async function activate(req, res) {
   }
 }
 
+async function shouldRequire2FA(user) {
+  const lastLoginDate = user.lastLogin;
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  return (
+    user.alwaysRequire2FA || (lastLoginDate && lastLoginDate < thirtyDaysAgo)
+  );
+}
+
 async function login(req, res) {
   const { error } = validateForms.validateLogin(req.body);
-  if (error) return res.status(400).json({ error: error.details[0].message });
 
-  const user = await UserModel.findOne({ email: req.body.email }).populate(
-    "role"
-  );
-  if (!user)
-    return res.status(400).json({ error: "Invalid email or password" });
+  try {
+    if (error) return res.status(400).json({ error: error.details[0].message });
 
-  const validPass = await bcryptjs.compare(req.body.password, user.password);
-  if (!validPass)
-    return res.status(400).json({ error: "Invalid email or password" });
-
-  if (!user.is_verified) {
-    const emailSent = await sendVerificationEmail(
-      user,
-      req.body.email,
-      user.name
+    const user = await UserModel.findOne({ email: req.body.email }).populate(
+      "role"
     );
-    return res
-      .status(401)
-      .json({
-        error:
-          "Please verify your email. A new verification email has been sent.",
+    if (!user)
+      return res.status(400).json({ error: "Invalid email or password" });
+
+    const validPass = await bcryptjs.compare(req.body.password, user.password);
+    if (!validPass)
+      return res.status(400).json({ error: "Invalid email or password" });
+
+    if (!user.is_verified) {
+      const emailSent = await sendVerificationEmail(
+        user,
+        req.body.email,
+        user.name
+      );
+      return res.status(401).json({
+        message:
+          "Email verification pending. Check your inbox to complete the process",
       });
+    }
+
+    const require2FA = await shouldRequire2FA(user);
+
+    if (require2FA) return sendOtp(req, res, user);
+    else return generateTokenAndRespond(res, user);
+    
+  } catch (error) {
+    console.error("Error during login:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
+}
 
-  const lastLoginDate = user.lastLogin || new Date(0);
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const require2FA = !user.lastLogin || lastLoginDate < thirtyDaysAgo;
+async function sendOtp(req, res) {
+  const user = await UserModel.findOne({ email: req.body.email });
+  if (!user) return res.status(404).json({ message: "User not found" });
 
-  if (require2FA) {
-    const otp = speakeasy.totp({
-      secret: process.env.OTP_SECRET,
-      encoding: "base32",
-      step: 300,
-    });
+  const otp = speakeasy.totp({
+    secret: process.env.OTP_SECRET,
+    encoding: "base32",
+    step: 300,
+  });
 
-    const otpToken = jwt.sign(
-      {
-        userId: user._id,
-        otpGeneratedAt: Date.now(),
-      },
-      process.env.OTP_TOKEN_SECRET,
-      { expiresIn: "5m" }
-    );
+  const otpToken = jwt.sign(
+    {
+      userId: user._id,
+      otpGeneratedAt: Date.now(),
+    },
+    process.env.OTP_TOKEN_SECRET,
+    { expiresIn: "5m" }
+  );
 
-    let mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: req.body.email,
-      subject: "Your OTP Code",
-      html: `
-                    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                        <h2 style="color: #4CAF50;">Your OTP Code</h2>
-                        <p>Enter the following OTP code to complete the login process:</p>
-                        <p style="font-size: 1.5em; font-weight: bold; color: #4CAF50;">${otp}</p>
-                        <p>This code will expire in 5 minutes.</p>
-                        <p>If you did not request this code, please ignore this email.</p>
-                    </div>
-                `,
-    };
-    await sendEmail(mailOptions);
+  let mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: req.body.email,
+    subject: "Your OTP Code",
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <h2 style="color: #333;">Your OTP Code</h2>
+        <p>Enter the following OTP code to complete the login process:</p>
+        <p style="font-size: 1.5em; font-weight: bold; color: #000;">${otp}</p>
+        <p>This code will expire in 5 minutes.</p>
+        <p>If you did not request this code, please ignore this email.</p>
+      </div>
+    `,
+  };
 
-    return res
-      .status(200)
-      .json({ success: "OTP sent to your email", otpToken, require2FA: true });
-  } else {
-    return generateTokenAndRespond(res, user);
-  }
+  await sendEmail(mailOptions);
+
+  return res.status(200).json({
+    success: "OTP sent to your email",
+    otpToken,
+    require2FA: true,
+  });
 }
 
 async function verifyOtp(req, res) {
   const { otp, otpToken } = req.body;
 
-  if (!otpToken) {
+  if (!otpToken)
     return res.status(400).json({ error: "OTP token is required" });
-  }
 
   let decoded;
   try {
@@ -168,14 +184,10 @@ async function verifyOtp(req, res) {
     step: 300,
   });
 
-  if (!isValid) {
-    return res.status(400).json({ error: "Invalid OTP" });
-  }
+  if (!isValid) return res.status(400).json({ error: "Invalid OTP" });
 
   const user = await UserModel.findById(decoded.userId);
-  if (!user) {
-    return res.status(400).json({ error: "User not found" });
-  }
+  if (!user) return res.status(400).json({ error: "User not found" });
 
   return generateTokenAndRespond(res, user);
 }
@@ -208,7 +220,6 @@ async function generateTokenAndRespond(res, user) {
 }
 
 async function forgotPassword(req, res) {
-  res;
   const { error } = validateForms.validateEmail(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
 
@@ -237,12 +248,12 @@ async function forgotPassword(req, res) {
       subject: "Password Reset Request",
       html: `
                 <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h2 style="color: #4CAF50;">Password Reset Request</h2>
+                <h2 style="color: #000;">Password Reset Request</h2>
                 <p>Hello ${user.name},</p>
                 <p>We received a request to reset your password. Click the link below to choose a new password:</p>
                 <p>
                     <a href="${process.env.FRONTEND_URL}/reset-password/${resetToken}" 
-                    style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #4CAF50; text-decoration: none; border-radius: 5px;">
+                    style="display: inline-block; padding: 10px 20px; font-size: 16px; color: #fff; background-color: #DF2020; text-decoration: none; border-radius: 5px;">
                     Reset Your Password
                     </a>
                 </p>
@@ -261,45 +272,12 @@ async function forgotPassword(req, res) {
   }
 }
 
-// async function resetPassword(req, res) {
-
-//     const user = req.user;
-//     const { error } = validateForms.validatePassword(req.body);
-
-//     if (error) {
-//         return res.status(400).json({ error: error.details[0].message });
-//     }
-
-//     try {
-//         // Generate a salt
-//         const salt = await bcryptjs.genSalt(10);
-
-//         // Hash the new password with the generated salt
-//         const hashedPassword = await bcryptjs.hash(req.body.password, salt);
-
-//         // Update the user's password
-//         const updatedUser = await UserModel.updateOne(
-//             { _id: user._id },
-//             { password: hashedPassword }
-//         );
-//     } catch (e) {
-//         console.log(e);
-//         return res.status(400).json({ error: "Something went wrong" });
-//     }
-
-//     return res.status(200).json({ success: "Password reset successfully" });
-// }
-
 async function resetPassword(req, res) {
   const { token } = req.params;
-  // const { password, confirmconfirmPassword } = req.body;
-
   if (!token) return res.status(401).json({ error: "Access denied" });
-  const { error } = validateForms.validatePassword(req.body);
 
-  if (error) {
-    return res.status(400).json({ error: error.details[0].message });
-  }
+  const { error } = validateForms.validatePassword(req.body);
+  if (error) return res.status(400).json({ error: error.details[0].message });
 
   try {
     // verify token
@@ -352,6 +330,7 @@ module.exports = {
   register,
   login,
   activate,
+  sendOtp,
   verifyOtp,
   logout,
   forgotPassword,

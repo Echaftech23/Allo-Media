@@ -20,7 +20,7 @@ async function sendVerificationEmail(user, email, name) {
                 <h3>🎉 Welcome to AlloMedia! 🎉</h3>
                 <p>We're excited to have you on board. Please click the link below to activate your account:</p>
                 <a href="${process.env.BACKEND_URL}/auth/activate?token=${queryParam}"
-                   style="display: inline-block; padding: 10px 20px; margin: 20px 0; font-size: 16px; color: white; background-color: #007BFF; text-decoration: none; border-radius: 5px;">
+                   style="display: inline-block; padding: 10px 20px; margin: 20px 0; font-size: 16px; color: white; background-color: #DF2020; text-decoration: none; border-radius: 5px;">
                     🔓 Activate your account
                 </a>
                 <p>If you did not create an account, please ignore this email.</p>
